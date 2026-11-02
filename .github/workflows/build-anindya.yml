@@ -4,7 +4,8 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - 'ANINDYA_APK_SOURCE_SINGLE_UPLOAD.zip'
+      - 'ANINDYA_APK_SOURCE_SINGLE_UPLOAD_FIX.zip'
+      - '.github/workflows/build-anindya.yml'
 
 permissions:
   contents: read
@@ -17,10 +18,18 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Extract ANINDYA ZIP
+      - name: Check ZIP
+        run: test -f ANINDYA_APK_SOURCE_SINGLE_UPLOAD_FIX.zip
+
+      - name: Extract ZIP
         run: |
-          unzip -q ANINDYA_APK_SOURCE_SINGLE_UPLOAD.zip -d extracted
-          PROJECT_DIR=$(find extracted -name settings.gradle -printf '%h\n' | head -n 1)
+          mkdir extracted
+          unzip -q ANINDYA_APK_SOURCE_SINGLE_UPLOAD_FIX.zip -d extracted
+          PROJECT_DIR=$(find extracted \( -name settings.gradle -o -name settings.gradle.kts \) -printf '%h\n' | head -n 1)
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "Gradle project tidak ditemukan!"
+            exit 1
+          fi
           echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
 
       - name: Setup Java 17
@@ -29,16 +38,15 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.7'
-
-      - name: Build ANINDYA APK
-        run: gradle --no-daemon -p "$PROJECT_DIR" assembleDebug
+      - name: Build APK
+        run: |
+          cd "$PROJECT_DIR"
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: ANINDYA-APK
-          path: extracted/**/app/build/outputs/apk/debug/app-debug.apk
+          path: extracted/**/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
